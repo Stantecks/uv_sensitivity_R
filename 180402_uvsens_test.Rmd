@@ -1,0 +1,93 @@
+---
+title: "Testing UV-sensitivity using R"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+```
+
+```{r}
+## Gives count, mean, standard deviation, standard error of the mean, and confidence interval (default 95%).
+##   data: a data frame.
+##   measurevar: the name of a column that contains the variable to be summariezed
+##   groupvars: a vector containing names of columns that contain grouping variables
+##   na.rm: a boolean that indicates whether to ignore NA's
+##   conf.interval: the percent range of the confidence interval (default is 95%)
+# summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+#                       conf.interval=.95, .drop=TRUE) {
+#     library(dplyr)
+# 
+#     # New version of length which can handle NA's: if na.rm==T, don't count them
+#     length2 <- function (x, na.rm=FALSE) {
+#         if (na.rm) sum(!is.na(x))
+#         else       length(x)
+#     }
+# 
+#     # This does the summary. For each group's data frame, return a vector with
+#     # N, mean, and sd
+#     datac <- ddply(data, groupvars, .drop=.drop,
+#       .fun = function(xx, col) {
+#         c(N    = length2(xx[[col]], na.rm=na.rm),
+#           mean = mean   (xx[[col]], na.rm=na.rm),
+#           sd   = sd     (xx[[col]], na.rm=na.rm)
+#         )
+#       },
+#       measurevar
+#     )
+# 
+#     # Rename the "mean" column    
+#     datac <- rename(datac, c("mean" = measurevar))
+# 
+#     datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+# 
+#     # Confidence interval multiplier for standard error
+#     # Calculate t-statistic for confidence interval: 
+#     # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+#     ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+#     datac$ci <- datac$se * ciMult
+# 
+#     return(datac)
+# }
+
+```
+
+## Importing data
+
+```{r data tidying}
+growths <- read.csv("raw_data/180310_cysdub_uvtreat.csv")
+
+growth_frame <- growths %>% 
+  gather(key = Well_ID, value = OD, -Time) %>%
+  mutate(Column_ID = substr(Well_ID, 2, 3), 
+         Row_ID = substr(Well_ID, 1, 1)) #Lesson: Column_ID got to 2 digits
+
+growth_frame$Column_ID <- as.numeric(growth_frame$Column_ID)
+
+growth_frame <- growth_frame %>%   
+  mutate(genotype = 
+           case_when(Column_ID == 1 | Column_ID == 7  ~ "∆nth(D138A)", #Suggest: Try mapvalues()
+                     Column_ID == 2 | Column_ID == 8  ~ "∆nth(WT)",
+                     Column_ID == 3 | Column_ID == 9  ~ "∆araC",
+                     Column_ID == 4 | Column_ID == 10  ~ "∆nth(Y82A)",
+                     Column_ID == 5 | Column_ID == 11  ~ "∆nth",
+                     Column_ID == 6 | Column_ID == 12  ~ "∆nth(C1/C4)",
+                     TRUE ~ "catchall"))
+check1 <- growth_frame %>% filter(genotype == "∆nth(D138A)")
+check2 <- growth_frame %>% filter(genotype == "∆nth(WT)")
+catchcheck <- growth_frame %>% filter(genotype == "catchall")
+
+growth_frame$genotype <- factor(growth_frame$genotype)
+
+another_summary <- growth_frame %>% 
+  group_by(genotype, Time) %>% 
+  summarize(Mean_OD = mean(OD), N = n(), SEM = sd(OD)/sqrt(N)) # Add confidence intervals with bootstrap
+```
+
+```{r Visualization}
+ggplot(another_summary, aes(x=Time, y=Mean_OD, colour=genotype)) + 
+  geom_point() +
+  geom_errorbar()
+```
+
